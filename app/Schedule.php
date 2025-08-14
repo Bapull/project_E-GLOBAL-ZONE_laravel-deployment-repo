@@ -38,7 +38,9 @@ class Schedule extends Model
         'sch_state_of_result_input',
         'sch_state_of_permission',
         'sch_for_zoom_pw',
-        'sch_for_zoom_link'
+        'sch_for_zoom_link',
+        'sch_type',
+        'sch_location'
     ];
 
     public $timestamps = false;
