@@ -372,10 +372,12 @@ class ScheduleController extends Controller
             $sect_end_date = $is_over_date ? date("Y-m-d", strtotime($sect->sect_end_date)) : date("Y-m-d", strtotime($request->input('sch_end_date')));
         } else {
             // <<-- 이미 등록된 스케줄이 있을 경우 삭제 후 재등록.
-            $get_sect_by_schedule = $this->schedule->get_sch_by_sect($request->input('sect_id'), $std_for_id);
 
-            $is_already_inserted_schedule = $get_sect_by_schedule->count() > 0;
-            if ($is_already_inserted_schedule) $get_sect_by_schedule->delete();
+            // $get_sect_by_schedule = $this->schedule->get_sch_by_sect($request->input('sect_id'), $std_for_id);
+
+            // $is_already_inserted_schedule = $get_sect_by_schedule->count() > 0;
+            // if ($is_already_inserted_schedule) $get_sect_by_schedule->delete();
+            
             // -->>
 
             // <<--이미 학기가 시작 된 경우 에러 반환.
@@ -1028,6 +1030,16 @@ class ScheduleController extends Controller
 
         $sch_start_date = date("Y-m-d H:i:s", $sch_start_date);
         $sch_end_date = date("Y-m-d H:i:s", $sch_end_date);
+
+        // 이미 해당 시간대에 스케줄이 존재하는지 확인 후, 있다면 삭제
+        $existing_schedule = Schedule::where('sch_std_for', $std_for_id)
+            ->where('sch_start_date', $sch_start_date)
+            ->where('sch_end_date', $sch_end_date)
+            ->first();
+
+        if ($existing_schedule) {
+            $existing_schedule->delete();
+        }
 
         return Schedule::create([
             'sch_sect' => $sect_id,
