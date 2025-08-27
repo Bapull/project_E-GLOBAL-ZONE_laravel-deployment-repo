@@ -175,6 +175,9 @@ Route::middleware('auth.multi')->group(static function () {
 
             /* 출석 결과 완료 된 학생의 상태 변경 로직 */
             Route::patch('update/{sch_id}', 'ScheduleController@update_attendance_result');
+
+            /* 장소 업데이트 */
+            Route::patch('location/{sch_id}', 'ScheduleController@update_sch_location')->name('schedules.update_location');
         });
 
         /* 계열 / 학과 관리 라우터 */

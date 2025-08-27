@@ -53,6 +53,32 @@ class ScheduleController extends Controller
         return self::response_json(Config::get('constants.kor.schedule.update_zoom_link.success'), 200);
     }
 
+    // 장소 업데이트
+    public function update_sch_location(Request $request, Schedule $sch_id): JsonResponse
+    {
+        $rules = [
+            'sch_location' => 'required|string|max:255'
+        ];
+
+        // <<-- Request 유효성 검사
+        $validated_result = self::request_validator(
+            $request,
+            $rules,
+            '장소 업데이트에 실패했습니다.'
+        );
+        // -->>
+
+        if (is_object($validated_result)) {
+            return $validated_result;
+        }
+
+        $sch_id->update([
+            'sch_location' => $request->input('sch_location'),
+        ]);
+
+        return self::response_json('장소가 성공적으로 업데이트되었습니다.', 200);
+    }
+
     // 출석 결과 완료 된 학생의 상태 변경 로직.
     public function update_attendance_result(Request $request, Schedule $sch_id): JsonResponse
     {
@@ -657,13 +683,12 @@ class ScheduleController extends Controller
 
         $setting_value = $preference_instance->getPreference();                         /* 환경설정 변수 */
 
-        $offline_or_online = $request->input('sch_type', 'online');                                 /* 스케줄 타입 ( 온라인, 오프라인 ) */
-        $location = $request->input('sch_location', '');                                         /* 오프라인 스케줄 장소 */
-
         foreach ($allSchdules as $schedule) {
             $std_for_id = $schedule['std_for_id'];
             $date = $schedule['date'];
             $times = $schedule['times'];
+            $offline_or_online = $schedule['sch_type'] ?? 'online';                    /* 개별 스케줄 타입 ( 온라인, 오프라인 ) */
+            $location = $schedule['sch_location'] ?? '';                               /* 개별 오프라인 스케줄 장소 */
 
             foreach ($times as $hour) {
                 // 1. 기존 스케줄 존재 여부 확인
