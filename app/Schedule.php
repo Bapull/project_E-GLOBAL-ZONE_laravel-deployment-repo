@@ -131,6 +131,8 @@ class Schedule extends Model
             'std_for_lang' => $result['std_for_lang'],
             'sch_date' => $sch_date,
             'sch_time' => $sch_time,
+            'sch_type' => $result['sch_type'],
+            'sch_location' => $result['sch_location'],
         ];
 
         return $response_data;
