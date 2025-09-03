@@ -148,6 +148,9 @@ Route::middleware('auth.multi')->group(static function () {
             /* 특정 스케줄 업데이트 */
             Route::patch('some/{sch_id}', 'ScheduleController@update')->name('schedules.update');
 
+            /* 특정 스케줄 온/오프라인 변경 */
+            Route::patch('update_online_offline_location/{sch_id}', 'ScheduleController@update_online_offline_location')->name('schedules.update_online_offline_location');
+
             /* 특정 스케줄 삭제 */
             Route::delete('some/{sch_id}', 'ScheduleController@destroy')->name('schedules.destroy');
 
@@ -172,6 +175,9 @@ Route::middleware('auth.multi')->group(static function () {
 
             /* 출석 결과 완료 된 학생의 상태 변경 로직 */
             Route::patch('update/{sch_id}', 'ScheduleController@update_attendance_result');
+
+             /* 장소 업데이트 */
+            Route::patch('location/{sch_id}', 'ScheduleController@update_sch_location')->name('schedules.update_location');
         });
 
         /* 계열 / 학과 관리 라우터 */

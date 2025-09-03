@@ -175,6 +175,7 @@ class DataExportController extends Controller
         $rules = [
             'start_date' => 'required|date',
             'end_date' => 'required|date|after_or_equal:start_date',
+            'is_offline' => 'sometimes|boolean'
         ];
 
         $validated_result = self::request_validator(
@@ -199,17 +200,26 @@ class DataExportController extends Controller
             'std_for_country as 국가',
             'sch_std_for as 유학생 학번',
             'std_for_name as 유학생 이름',
+            'sch_type as 스케줄 유형',
+            'sch_location as 스케줄 장소',
             DB::raw("(CASE WHEN sch_state_of_result_input = 1 THEN '완료' ELSE '미완료' END) AS '결과 입력 여부'"),
             DB::raw("(CASE WHEN sch_state_of_permission = 1 THEN '승인' ELSE '미승인' END) AS '관리자 승인 여부'")
         ];
 
-        $sch_list = Schedule::select($select_column)
+        $sch_list_query = Schedule::select($select_column)
             ->join('sections', 'schedules.sch_sect', 'sections.sect_id')
             ->join('student_foreigners as std_for', 'schedules.sch_std_for', 'std_for.std_for_id')
             ->whereDate('sch_start_date', '>=', $start_date)
             ->whereDate('sch_start_date', '<=', $end_date)
-            ->orderBy('sch_start_date')
-            ->get();
+            ->orderBy('sch_start_date');
+
+        if ($request->has('is_offline')) {
+            $is_offline = $request->input('is_offline');
+            $sch_list_query->where('sch_type', $is_offline ? 'offline' : 'online');
+        }
+            
+            
+        $sch_list = $sch_list_query->get();
 
 
         $name = date("[Y년 m월 d일", strtotime($start_date)) . " - " . date("m월 d일] ", strtotime($end_date)) . Config::get('constants.kor.data_export.sch');

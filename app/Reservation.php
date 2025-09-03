@@ -110,7 +110,8 @@ class Reservation extends Model
             'std_for_lang', 'std_for_name',
             'sch_start_date', 'sch_end_date', 'res_id',
             'res_state_of_permission', 'res_state_of_attendance',
-            'for.std_for_id', 'std_for_zoom_id'
+            'for.std_for_id', 'std_for_zoom_id',
+            'sch.sch_type', 'sch.sch_location',
         ];
 
         $result =

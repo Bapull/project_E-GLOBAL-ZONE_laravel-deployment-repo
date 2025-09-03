@@ -53,6 +53,32 @@ class ScheduleController extends Controller
         return self::response_json(Config::get('constants.kor.schedule.update_zoom_link.success'), 200);
     }
 
+    // 장소 업데이트
+    public function update_sch_location(Request $request, Schedule $sch_id): JsonResponse
+    {
+        $rules = [
+            'sch_location' => 'required|string|max:255'
+        ];
+
+        // <<-- Request 유효성 검사
+        $validated_result = self::request_validator(
+            $request,
+            $rules,
+            '장소 업데이트에 실패했습니다.'
+        );
+        // -->>
+
+        if (is_object($validated_result)) {
+            return $validated_result;
+        }
+
+        $sch_id->update([
+            'sch_location' => $request->input('sch_location'),
+        ]);
+
+        return self::response_json('장소가 성공적으로 업데이트되었습니다.', 200);
+    }
+
     // 출석 결과 완료 된 학생의 상태 변경 로직.
     public function update_attendance_result(Request $request, Schedule $sch_id): JsonResponse
     {
@@ -106,7 +132,8 @@ class ScheduleController extends Controller
     {
         $rules = [
             'search_date' => 'required|date',
-            'guard' => 'required|string|in:admin'
+            'guard' => 'required|string|in:admin',
+            'is_offline' => 'nullable|boolean'
         ];
 
         // <<-- Request 유효성 검사
@@ -123,26 +150,37 @@ class ScheduleController extends Controller
 
         $search_date = $request->input('search_date');
 
-        function std_for_search_by_lang($date, $std_for_lang)
+        function std_for_search_by_lang($date, $std_for_lang, $is_offline)
         {
-            return
-                Schedule::select('std_for_id', 'std_for_name', 'std_for_lang')
+            $query = Schedule::select('std_for_id', 'std_for_name', 'std_for_lang')
                 ->join('student_foreigners as for', 'schedules.sch_std_for', '=', 'for.std_for_id')
                 ->whereNotNull('sch_std_for')
                 ->whereDate('sch_start_date', '=', $date)
-                ->where('std_for_lang', $std_for_lang)
-                ->groupBy('for.std_for_id')
-                ->get();
+                ->where('std_for_lang', $std_for_lang);
+
+            if ($is_offline) {
+                $query->where('sch_type', 'offline');
+            } else {
+                $query->where('sch_type', 'online');
+            }
+            return $query->groupBy('for.std_for_id')->get();
         };
 
-        function std_for_add_schedule_data($response_data, $date)
+        function std_for_add_schedule_data($response_data, $date, $is_offline)
         {
             foreach ($response_data as $student) {
-                $student['schedules'] = Schedule::select('sch_id', 'sch_start_date', 'sch_end_date', 'sch_for_zoom_pw', 'sch_for_zoom_link', 'sch_state_of_result_input', 'sch_state_of_permission')
+                $student_query = Schedule::select('sch_id', 'sch_start_date', 'sch_end_date', 'sch_for_zoom_pw', 'sch_for_zoom_link', 'sch_state_of_result_input', 'sch_state_of_permission', 'sch_type','sch_location')
                     ->join('student_foreigners as for', 'schedules.sch_std_for', '=', 'std_for_id')
                     ->whereDate('sch_start_date', '=', $date)
-                    ->where('std_for_id', $student->std_for_id)
-                    ->get();
+                    ->where('std_for_id', $student->std_for_id);
+                
+                if ($is_offline) {
+                    $schedule_query->where('sch_type', 'offline');
+                } else {
+                    $schedule_query->where('sch_type', 'online');
+                }
+                    
+                $student['schedules'] = $schedule_query->get();
 
                 foreach ($student['schedules'] as $schedule) {
                     $reservation_data = Schedule::join('reservations as res', 'schedules.sch_id', '=', 'res.res_sch');
@@ -169,15 +207,16 @@ class ScheduleController extends Controller
 
         $response_data = [];
 
+        $is_offline = $request->boolean('is_offline');
         // 언어별 유학생 분류.
-        $response_data['English'] = std_for_search_by_lang($search_date, '영어');
-        $response_data['Japanese'] = std_for_search_by_lang($search_date, '일본어');
-        $response_data['Chinese'] = std_for_search_by_lang($search_date, '중국어');
+        $response_data['English'] = std_for_search_by_lang($search_date, '영어', $is_offline);
+        $response_data['Japanese'] = std_for_search_by_lang($search_date, '일본어', $is_offline);
+        $response_data['Chinese'] = std_for_search_by_lang($search_date, '중국어', $is_offline);
 
         // 해당 유학생에 대한 스케줄 정보 추가.
-        $response_data['English'] = std_for_add_schedule_data($response_data['English'], $search_date);
-        $response_data['Japanese'] = std_for_add_schedule_data($response_data['Japanese'], $search_date);
-        $response_data['Chinese'] = std_for_add_schedule_data($response_data['Chinese'], $search_date);
+        $response_data['English'] = std_for_add_schedule_data($response_data['English'], $search_date, $is_offline);
+        $response_data['Japanese'] = std_for_add_schedule_data($response_data['Japanese'], $search_date, $is_offline);
+        $response_data['Chinese'] = std_for_add_schedule_data($response_data['Chinese'], $search_date, $is_offline);
 
         return response()->json([
             'message' => Config::get('constants.kor.schedule.show.success'),
@@ -196,6 +235,7 @@ class ScheduleController extends Controller
         $rules = [
             'start_date' => 'required|date',
             'end_date' => 'required|date',
+            'is_offline' => 'nullable|boolean',
         ];
 
         // <<-- Request 유효성 검사
@@ -208,17 +248,25 @@ class ScheduleController extends Controller
         if (is_object($validated_result)) {
             return $validated_result;
         }
+        $is_offline = $request->boolean('is_offline');
         // -->>
 
         $std_for_id = $request->user($request->input('guard'))['std_for_id'];
 
-        $result_foreigner_schedules = Schedule::select('std_for_id', 'sch_id', 'sch_start_date', 'sch_end_date', 'sch_for_zoom_pw', 'sch_for_zoom_link', 'sch_state_of_result_input', 'sch_state_of_permission')
+        $list_foreigner_schedules = Schedule::select('std_for_id', 'sch_id', 'sch_start_date', 'sch_end_date', 'sch_for_zoom_pw', 'sch_for_zoom_link', 'sch_state_of_result_input', 'sch_state_of_permission', 'sch_type', 'sch_location')
             ->join('student_foreigners as for', 'schedules.sch_std_for', '=', 'std_for_id')
             ->where('std_for_id', $std_for_id)
             ->whereDate('sch_start_date', '>=', $request->input('start_date'))
             ->whereDate('sch_start_date', '<=', $request->input('end_date'))
-            ->orderBy('sch_start_date')
-            ->get();
+            ->orderBy('sch_start_date');
+        
+        if ($is_offline) {
+            $list_foreigner_schedules->where('sch_type', 'offline');
+        } else {
+            $list_foreigner_schedules->where('sch_type', 'online');
+        }
+
+        $result_foreigner_schedules = $list_foreigner_schedules->get();
 
         foreach ($result_foreigner_schedules as $schedule) {
             $reservation_data = Schedule::join('reservations as res', 'schedules.sch_id', '=', 'res.res_sch')
@@ -261,6 +309,10 @@ class ScheduleController extends Controller
             'sch_end_date' => 'date|after_or_equal:sect_start_date',
             'exception_mode' => 'required|bool',
             // -->>
+            // <<-- 오프라인 추가
+            'sch_type' => 'nullable|string|in:online,offline',
+            'sch_location' => 'nullable|string|required_if:sch_type,offline',
+            // -->>
         ];
 
         // <<-- Request 유효성 검사
@@ -282,6 +334,9 @@ class ScheduleController extends Controller
         $sect = Section::find($request->input('sect_id'));                                       /* 학기 데이터 */
         $std_for_id = $request->input('std_for_id');                                             /* 외국인 유학생 학번 */
         $sect_start_date = strtotime($sect->sect_start_date);
+
+        $offline_or_online = $request->input('sch_type', 'online');                                 /* 스케줄 타입 ( 온라인, 오프라인 ) */
+        $location = $request->input('sch_location', '');  
 
         if ($exception_mode) {
             /**
@@ -312,10 +367,10 @@ class ScheduleController extends Controller
             $sect_end_date = $is_over_date ? date("Y-m-d", strtotime($sect->sect_end_date)) : date("Y-m-d", strtotime($request->input('sch_end_date')));
         } else {
             // <<-- 이미 등록된 스케줄이 있을 경우 삭제 후 재등록.
-            $get_sect_by_schedule = $this->schedule->get_sch_by_sect($request->input('sect_id'), $std_for_id);
+            // $get_sect_by_schedule = $this->schedule->get_sch_by_sect($request->input('sect_id'), $std_for_id);
 
-            $is_already_inserted_schedule = $get_sect_by_schedule->count() > 0;
-            if ($is_already_inserted_schedule) $get_sect_by_schedule->delete();
+            // $is_already_inserted_schedule = $get_sect_by_schedule->count() > 0;
+            // if ($is_already_inserted_schedule) $get_sect_by_schedule->delete();
             // -->>
 
             // <<--이미 학기가 시작 된 경우 에러 반환.
@@ -375,7 +430,7 @@ class ScheduleController extends Controller
                 // 시간 리스트 목록
                 foreach ($day as $hour) {
                     // 스케줄 생성
-                    $this->set_custom_schedule($setting_value, $sect_start_date, $hour, $sect->sect_id, $std_for_id);
+                    $this->set_custom_schedule($setting_value, $sect_start_date, $hour, $sect->sect_id, $std_for_id, $offline_or_online, $location);
                 }
 
                 // 종료 날짜에 맞춰 반복문 종료.
@@ -414,7 +469,60 @@ class ScheduleController extends Controller
             'sch_std_for' => 'required|integer',
             'sch_start_date' => 'required|date',
             'sch_end_date' => 'required|date',
-            'guard' => 'required|string|in:admin'
+            'guard' => 'required|string|in:admin',
+            'sch_type' => 'nullable|string|in:online,offline',
+            'sch_location' => 'nullable|string|required_if:sch_type,offline'
+        ];
+
+        // <<-- Request 유효성 검사
+        $validated_result = self::request_validator(
+            $request,
+            $rules,
+            Config::get('constants.kor.schedule.update.failure')
+        );
+
+        if (is_object($validated_result)) {
+            return $validated_result;
+        }
+        $update_data =[
+            'sch_start_date' => $request->input('sch_start_date'),
+            'sch_end_date' => $request->input('sch_end_date'),
+        ];
+
+        // sch_type 값이 요청에 포함되어 있을 경우, 업데이트 데이터에 추가
+        if ($request->has('sch_type')) {
+            $update_data['sch_type'] = $request->input('sch_type');
+        }
+    
+        // sch_location 값이 요청에 포함되어 있을 경우, 업데이트 데이터에 추가
+        if ($request->has('sch_location')) {
+            $update_data['sch_location'] = $request->input('sch_location');
+        }
+    
+        // 만약 sch_type이 'online'으로 지정되었다면, sch_location을 null로 업데이트
+        if ($request->input('sch_type') === 'online') {
+            $update_data['sch_location'] = null;
+        }
+
+        $sch_id->update($update_data);
+
+        return self::response_json(Config::get('constants.kor.schedule.update.success'), 200);
+    }
+
+
+    /**
+     * 관리자 - 온/오프라인 변경 및 장소 업데이트
+     *
+     * @param \Illuminate\Http\Request $request
+     * @param int $sch_id
+     * @return \Illuminate\Http\Response
+     */
+    public function update_online_offline_location(Request $request, Schedule $sch_id): JsonResponse
+    {
+        $rules = [
+            'guard' => 'required|string|in:admin',
+            'sch_type' => 'required|string|in:online,offline',
+            'sch_location' => 'nullable|string|required_if:sch_type,offline'
         ];
 
         // <<-- Request 유효성 검사
@@ -428,14 +536,23 @@ class ScheduleController extends Controller
             return $validated_result;
         }
 
-        $sch_id->update([
-            'sch_start_date' => $request->input('sch_start_date'),
-            'sch_end_date' => $request->input('sch_end_date'),
-        ]);
+        $update_data = [
+            'sch_type' => $request->input('sch_type'),
+        ];
+    
+    
+        // 만약 sch_type이 'online'으로 지정되었다면, sch_location을 null로 업데이트
+        if ($request->input('sch_type') === 'online') {
+            $update_data['sch_location'] = null;
+        }else{
+            $update_data['sch_location'] = $request->input('sch_location');
+        }
+    
+        // 최종적으로 데이터 업데이트
+        $sch_id->update($update_data);
 
         return self::response_json(Config::get('constants.kor.schedule.update.success'), 200);
     }
-
 
     /**
      * 관리자 - 해당 학기 해당 유학생 전체 스케줄 삭제
@@ -535,7 +652,11 @@ class ScheduleController extends Controller
             'schedule.*.times' => 'required|array',
             'schedule.*.times.*' => 'required|integer',
             'schedule.*.date' => 'required|date',
-            'guard' => 'required|string|in:admin'
+            'guard' => 'required|string|in:admin',
+            // <<-- 오프라인 추가
+            'sch_type' => 'nullable|string|in:online,offline',
+            'sch_location' => 'nullable|string|required_if:sch_type,offline'
+            // -->>
         ];
 
         $validated_result = self::request_validator(
@@ -552,6 +673,9 @@ class ScheduleController extends Controller
         $sect_id = $request->input('sect_id');
 
         $setting_value = $preference_instance->getPreference();                         /* 환경설정 변수 */
+
+        $offline_or_online = $request->input('sch_type', 'online');                                 /* 스케줄 타입 ( 온라인, 오프라인 ) */
+        $location = $request->input('sch_location', ''); 
 
         foreach ($allSchdules as $schedule) {
             $std_for_id = $schedule['std_for_id'];
@@ -578,7 +702,7 @@ class ScheduleController extends Controller
                 if ($is_duplicated_schedule) continue;
 
                 // 스케줄 생성
-                $this->set_custom_schedule($setting_value, $date, $hour, $sect_id, $std_for_id);
+                $this->set_custom_schedule($setting_value, $date, $hour, $sect_id, $std_for_id, $offline_or_online, $location);
             }
         }
 
@@ -814,11 +938,17 @@ class ScheduleController extends Controller
     /**
      * 한국인학생 - 현재 날짜 기준 예약 가능 스케줄 조회
      * /api/korean/schedule/
-     *
+     * @param Request $request
      * @return JsonResponse
      */
-    public function index(Preference $preference_instance): JsonResponse
+    public function index(Request $request, Preference $preference_instance): JsonResponse
     {
+        $rules = [
+            'is_offline' => 'nullable|boolean'
+        ];
+
+        $is_offline = $request->boolean('is_offline');
+
         $setting_value = $preference_instance->getPreference();                                 /* 환경설정 변수 */
         $max_std_once = $setting_value->max_std_once;
 
@@ -827,22 +957,29 @@ class ScheduleController extends Controller
         /* 예약 신청 시작 기준 종료 날짜 */
         $sch_end_date = date("Y-m-d", strtotime("+{$setting_value->res_start_period} days"));
 
-        $allSchdules = Schedule::select('sch_id', 'std_for_name', 'std_for_lang', 'sch_start_date', 'sch_end_date')
+        $allSchdules = Schedule::select('sch_id', 'std_for_name', 'std_for_lang', 'sch_start_date', 'sch_end_date','sch_type','sch_location')
             ->whereNotNull('schedules.sch_std_for')
             ->whereDate('schedules.sch_start_date', '>', $sch_start_date)
             ->whereDate('schedules.sch_end_date', '<=', $sch_end_date)
             ->join('student_foreigners as for', 'schedules.sch_std_for', 'for.std_for_id')
-            ->orderBy('schedules.sch_start_date')
-            ->get();
+            ->orderBy('schedules.sch_start_date');
 
-        foreach ($allSchdules as $schedule) {
+        if ($is_offline) {
+            $allSchdules->where('sch_type', 'offline');
+        } else {
+            $allSchdules->where('sch_type', 'online');
+        }
+
+        $allSchdulesResult = $allSchdules->get();
+
+        foreach ($allSchdulesResult as $schedule) {
             $schedule['std_res_count'] = Reservation::whereNotNull('res_std_kor')->where('res_sch', $schedule['sch_id'])->count();
             $schedule['sch_res_available'] = ($schedule['std_res_count'] <= $max_std_once) ? true : false;
         }
 
         return response()->json([
-            'message' => $allSchdules->count() === 0 ? Config::get('constants.kor.schedule.kor_index.failure') : Config::get('constants.kor.schedule.kor_index.success'),
-            'data' => $allSchdules,
+            'message' => $allSchdulesResult->count() === 0 ? Config::get('constants.kor.schedule.kor_index.failure') : Config::get('constants.kor.schedule.kor_index.success'),
+            'data' => $allSchdulesResult,
         ], 200);
     }
 
@@ -861,7 +998,7 @@ class ScheduleController extends Controller
     }
 
     // 스케줄 생성 커스텀 함수.
-    public function set_custom_schedule(Object $setting_value, string $date, string $hour, int $sect_id, int $std_for_id)
+    public function set_custom_schedule(Object $setting_value, string $date, string $hour, int $sect_id, int $std_for_id, string $offline_or_online, string $location)
     {
         // 줌 비밀번호 생성
         $zoom_pw = mt_rand(self::_ZOOM_RAN_NUM_START, self::_ZOOM_RAN_NUM_END);
@@ -876,6 +1013,8 @@ class ScheduleController extends Controller
             'sch_start_date' => $sch_start_date,
             'sch_end_date' => $sch_end_date,
             'sch_for_zoom_pw' => $zoom_pw,
+            'sch_type' => $offline_or_online,
+            'sch_location' => $location,
         ]);
     }
 

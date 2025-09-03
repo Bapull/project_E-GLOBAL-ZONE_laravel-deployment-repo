@@ -38,7 +38,9 @@ class Schedule extends Model
         'sch_state_of_result_input',
         'sch_state_of_permission',
         'sch_for_zoom_pw',
-        'sch_for_zoom_link'
+        'sch_for_zoom_link',
+        'sch_type',
+        'sch_location'
     ];
 
     public $timestamps = false;
@@ -129,6 +131,8 @@ class Schedule extends Model
             'std_for_lang' => $result['std_for_lang'],
             'sch_date' => $sch_date,
             'sch_time' => $sch_time,
+            'sch_type' => $result['sch_type'],
+            'sch_location' => $result['sch_location'],
         ];
 
         return $response_data;
