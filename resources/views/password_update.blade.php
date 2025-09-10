@@ -162,7 +162,7 @@ $request_uri = explode("?", $_SERVER['REQUEST_URI'])[0];
     )
 )
     <?php
-    if (isset($account, $provider, $name, $token, $login_controller, $uri)) {
+    
         $request = [
             'account' => $account,
             'provider' => $provider,
@@ -170,7 +170,7 @@ $request_uri = explode("?", $_SERVER['REQUEST_URI'])[0];
             'token' => $token
         ];
         $ran_num = $login_controller->remeber_token($request);
-    }
+    
     ?>
     <div class="head">
         <div class="head_area">
