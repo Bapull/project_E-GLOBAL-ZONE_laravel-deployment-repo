@@ -169,7 +169,7 @@ class ScheduleController extends Controller
         function std_for_add_schedule_data($response_data, $date, $is_offline)
         {
             foreach ($response_data as $student) {
-                $student_query = Schedule::select('sch_id', 'sch_start_date', 'sch_end_date', 'sch_for_zoom_pw', 'sch_for_zoom_link', 'sch_state_of_result_input', 'sch_state_of_permission', 'sch_type','sch_location')
+                $schedule_query = Schedule::select('sch_id', 'sch_start_date', 'sch_end_date', 'sch_for_zoom_pw', 'sch_for_zoom_link', 'sch_state_of_result_input', 'sch_state_of_permission', 'sch_type','sch_location')
                     ->join('student_foreigners as for', 'schedules.sch_std_for', '=', 'std_for_id')
                     ->whereDate('sch_start_date', '=', $date)
                     ->where('std_for_id', $student->std_for_id);
@@ -654,8 +654,8 @@ class ScheduleController extends Controller
             'schedule.*.date' => 'required|date',
             'guard' => 'required|string|in:admin',
             // <<-- 오프라인 추가
-            'sch_type' => 'nullable|string|in:online,offline',
-            'sch_location' => 'nullable|string|required_if:sch_type,offline'
+            'schedule.*.sch_type' => 'nullable|string|in:online,offline',
+            'schedule.*.sch_location' => 'nullable|string|required_if:schedule.*.sch_type,offline'
             // -->>
         ];
 
@@ -674,13 +674,15 @@ class ScheduleController extends Controller
 
         $setting_value = $preference_instance->getPreference();                         /* 환경설정 변수 */
 
-        $offline_or_online = $request->input('sch_type', 'online');                                 /* 스케줄 타입 ( 온라인, 오프라인 ) */
-        $location = $request->input('sch_location', ''); 
+        
 
         foreach ($allSchdules as $schedule) {
             $std_for_id = $schedule['std_for_id'];
             $date = $schedule['date'];
             $times = $schedule['times'];
+
+            $offline_or_online = $schedule['sch_type'] ?? 'online';
+            $location = $schedule['sch_location'] ?? '';
 
             foreach ($times as $hour) {
                 // 1. 기존 스케줄 존재 여부 확인
@@ -705,7 +707,7 @@ class ScheduleController extends Controller
                 $this->set_custom_schedule($setting_value, $date, $hour, $sect_id, $std_for_id, $offline_or_online, $location);
             }
         }
-
+        
         return self::response_json(Config::get('constants.kor.schedule.store.success'), 201);
     }
 
